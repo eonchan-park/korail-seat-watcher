@@ -194,7 +194,6 @@ function buildEmailHtml(rows, timestamp) {
 async function main() {
   const browser = await chromium.launch({ headless: true });
   let prevAvailableKey = null;
-  let notifiedAvailability = false;
 
   try {
     for (let i = 1; i <= POLL_COUNT; i += 1) {
@@ -202,6 +201,7 @@ async function main() {
       console.log(`\n=== [${i}/${POLL_COUNT}] ${timestamp} 조회 시작 ===`);
 
       let rows = [];
+      let searchError = null;
       try {
         const trains = await searchWithRetry(browser);
         rows = summarize(trains);
@@ -211,28 +211,42 @@ async function main() {
             .join('\n') || '(시간대 내 열차 없음)',
         );
       } catch (err) {
+        searchError = err;
         console.error(`[조회 실패] ${err.message}`);
       }
 
       const availableRows = rows.filter((r) => r.available);
       const currentKey = availableRows.map((r) => r.trainNo).sort().join(',');
+      const isLast = i === POLL_COUNT;
+      // 1회차(즉시 확인용), 마지막회차(최종 결과), 그리고 좌석 상황이 바뀔 때마다 메일 발송.
+      const stateChanged = currentKey !== prevAvailableKey;
+      const shouldNotify = i === 1 || isLast || stateChanged;
 
-      if (currentKey && currentKey !== prevAvailableKey) {
-        await sendEmail(
-          `[코레일 좌석 알림] ${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE} 좌석 발견`,
-          buildEmailHtml(availableRows, timestamp),
-        );
-        notifiedAvailability = true;
+      if (shouldNotify) {
+        if (searchError && rows.length === 0 && !availableRows.length) {
+          await sendEmail(
+            `[코레일 좌석 알림] ${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE} 조회 오류 (${i}/${POLL_COUNT}회차)`,
+            `<p>조회 중 오류가 발생했습니다: ${searchError.message}</p><p>다음 회차에 재시도합니다.</p>`,
+          );
+        } else if (availableRows.length > 0) {
+          await sendEmail(
+            `[코레일 좌석 알림] ${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE} 좌석 발견 (${i}/${POLL_COUNT}회차)`,
+            buildEmailHtml(availableRows, timestamp),
+          );
+        } else if (i === 1) {
+          await sendEmail(
+            `[코레일 좌석 알림] 조회 시작됨 - 현재 좌석 없음 (${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE})`,
+            `<p>조회를 시작했습니다. 지정한 시간대(${TIME_FROM}~${TIME_TO})에는 현재 예약 가능한 좌석이 없습니다.</p>
+             <p>앞으로 1시간 동안 5분 간격으로 계속 확인하며, 좌석이 생기면 즉시 다시 메일을 보내드립니다.</p>`,
+          );
+        } else if (isLast) {
+          await sendEmail(
+            `[코레일 좌석 알림] ${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE} 조회 종료 (좌석 없음)`,
+            `<p>1시간 동안 5분 간격으로 조회했지만 지정한 시간대(${TIME_FROM}~${TIME_TO})에 예약 가능한 좌석을 찾지 못했습니다.</p>`,
+          );
+        }
       }
       prevAvailableKey = currentKey;
-
-      const isLast = i === POLL_COUNT;
-      if (isLast && !notifiedAvailability) {
-        await sendEmail(
-          `[코레일 좌석 알림] ${FROM_STATION}→${TO_STATION} ${TRAVEL_DATE} 조회 종료 (좌석 없음)`,
-          `<p>1시간 동안 5분 간격으로 조회했지만 지정한 시간대(${TIME_FROM}~${TIME_TO})에 예약 가능한 좌석을 찾지 못했습니다.</p>`,
-        );
-      }
 
       if (!isLast) await sleep(POLL_INTERVAL_MS);
     }
