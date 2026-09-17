@@ -1,0 +1,56 @@
+name: 코레일 좌석 조회
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_station:
+        description: "출발역"
+        required: true
+        default: "용산"
+      to_station:
+        description: "도착역"
+        required: true
+        default: "광주송정"
+      travel_date:
+        description: "출발 날짜 (YYYY-MM-DD)"
+        required: true
+      time_from:
+        description: "시작 시각 (HH:MM)"
+        required: true
+        default: "00:00"
+      time_to:
+        description: "종료 시각 (HH:MM)"
+        required: true
+        default: "23:59"
+      recipient_email:
+        description: "결과를 받을 이메일 주소"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 의존성 설치
+        run: npm install
+
+      - name: Playwright 브라우저 설치
+        run: npx playwright install --with-deps chromium
+
+      - name: 좌석 조회 실행 (5분 간격, 1시간)
+        env:
+          FROM_STATION: ${{ inputs.from_station }}
+          TO_STATION: ${{ inputs.to_station }}
+          TRAVEL_DATE: ${{ inputs.travel_date }}
+          TIME_FROM: ${{ inputs.time_from }}
+          TIME_TO: ${{ inputs.time_to }}
+          RECIPIENT_EMAIL: ${{ inputs.recipient_email }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: npm run check

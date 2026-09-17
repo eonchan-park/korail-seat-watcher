@@ -1,0 +1,14 @@
+{
+  "name": "korail-seat-watcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "코레일 승차권 예매 사이트에서 지정한 구간/날짜/시간대의 좌석 현황을 주기적으로 조회해 이메일로 알려주는 자동화 도구",
+  "type": "commonjs",
+  "scripts": {
+    "check": "node scripts/check-seats.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.14",
+    "playwright": "^1.47.0"
+  }
+}

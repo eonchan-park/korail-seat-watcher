@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>코레일 좌석 알리미</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --border: #e2e4e8;
+    --accent: #0b63d6;
+    --accent-hover: #094fae;
+    --danger: #c0392b;
+    --success: #1e8e3e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; }
+  .row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .row > div { flex: 1; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    width: 100%;
+    padding: 11px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .status { margin-top: 14px; font-size: 14px; padding: 10px 12px; border-radius: 8px; display: none; }
+  .status.ok { display: block; background: #e6f4ea; color: var(--success); }
+  .status.err { display: block; background: #fdecea; color: var(--danger); }
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+  a { color: var(--accent); }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --card: #1e2126; --text: #e8eaed; --muted: #9aa0a6;
+      --border: #33363b; --accent: #4c9aff; --accent-hover: #6bb0ff;
+    }
+    input { background: #101214; }
+    .status.ok { background: #12321f; }
+    .status.err { background: #3a1c1c; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>코레일 좌석 알리미</h1>
+  <p class="sub">구간·날짜·시간대를 입력하고 조회를 시작하면, GitHub Actions가 5분마다 1시간 동안 좌석을 확인해 이메일로 알려줍니다.</p>
+
+  <div class="card">
+    <details id="settingsBox">
+      <summary>⚙ 최초 1회 설정 (GitHub 저장소 / 토큰)</summary>
+      <div class="row">
+        <div>
+          <label for="owner">GitHub 계정(owner)</label>
+          <input id="owner" placeholder="예: eonchan-park">
+        </div>
+        <div>
+          <label for="repo">저장소 이름(repo)</label>
+          <input id="repo" placeholder="예: korail-seat-watcher">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="branch">브랜치</label>
+          <input id="branch" placeholder="main" value="main">
+        </div>
+        <div>
+          <label for="token">GitHub Personal Access Token</label>
+          <input id="token" type="password" placeholder="fine-grained PAT (Actions: write)">
+        </div>
+      </div>
+      <p class="note">
+        토큰은 이 브라우저의 localStorage에만 저장되며, GitHub API(api.github.com)로 직접 전송될 뿐
+        어디에도 커밋되거나 제3의 서버로 전달되지 않습니다. 저장소 Settings → Developer settings →
+        Fine-grained tokens 에서 이 저장소에 대해 <b>Actions: Read and write</b> 권한만 부여해 생성하세요.<br>
+        이메일 발송용 Gmail 앱 비밀번호는 이 페이지가 아니라 GitHub 저장소의
+        <b>Settings → Secrets and variables → Actions</b> 에 <code>GMAIL_USER</code>,
+        <code>GMAIL_APP_PASSWORD</code> 이름으로 직접 등록해주세요.
+      </p>
+    </details>
+  </div>
+
+  <form class="card" id="searchForm">
+    <h2>조회 조건</h2>
+    <div class="row">
+      <div>
+        <label for="fromStation">출발역</label>
+        <input id="fromStation" value="용산" required>
+      </div>
+      <div>
+        <label for="toStation">도착역</label>
+        <input id="toStation" value="광주송정" required>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="travelDate">출발 날짜</label>
+        <input id="travelDate" type="date" required>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="timeFrom">시작 시각</label>
+        <input id="timeFrom" type="time" value="00:00" required>
+      </div>
+      <div>
+        <label for="timeTo">종료 시각</label>
+        <input id="timeTo" type="time" value="23:59" required>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="email">결과 받을 이메일</label>
+        <input id="email" type="email" required>
+      </div>
+    </div>
+    <button type="submit" id="submitBtn">조회 시작 (1시간 / 5분 간격)</button>
+    <div class="status" id="status"></div>
+  </form>
+</div>
+
+<script>
+(function () {
+  const LS = { owner: 'korail_owner', repo: 'korail_repo', token: 'korail_token', branch: 'korail_branch', email: 'korail_email' };
+
+  const el = (id) => document.getElementById(id);
+  const owner = el('owner'), repo = el('repo'), branch = el('branch'), token = el('token');
+  const fromStation = el('fromStation'), toStation = el('toStation');
+  const travelDate = el('travelDate'), timeFrom = el('timeFrom'), timeTo = el('timeTo');
+  const email = el('email'), status = el('status'), submitBtn = el('submitBtn');
+  const settingsBox = el('settingsBox');
+
+  function loadSettings() {
+    owner.value = localStorage.getItem(LS.owner) || '';
+    repo.value = localStorage.getItem(LS.repo) || '';
+    branch.value = localStorage.getItem(LS.branch) || 'main';
+    token.value = localStorage.getItem(LS.token) || '';
+    email.value = localStorage.getItem(LS.email) || '';
+    if (!owner.value || !repo.value || !token.value) settingsBox.open = true;
+  }
+  function saveSettings() {
+    localStorage.setItem(LS.owner, owner.value.trim());
+    localStorage.setItem(LS.repo, repo.value.trim());
+    localStorage.setItem(LS.branch, branch.value.trim() || 'main');
+    localStorage.setItem(LS.token, token.value.trim());
+    localStorage.setItem(LS.email, email.value.trim());
+  }
+
+  function showStatus(msg, isError, link) {
+    status.className = 'status ' + (isError ? 'err' : 'ok');
+    status.innerHTML = msg + (link ? ` <a href="${link}" target="_blank" rel="noopener">Actions에서 진행상황 보기 →</a>` : '');
+  }
+
+  // 오늘 날짜를 기본값으로
+  travelDate.value = new Date().toISOString().slice(0, 10);
+  loadSettings();
+
+  el('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const o = owner.value.trim(), r = repo.value.trim(), b = branch.value.trim() || 'main', t = token.value.trim();
+    if (!o || !r || !t) {
+      settingsBox.open = true;
+      showStatus('설정에서 GitHub 저장소(owner/repo)와 토큰을 먼저 입력해주세요.', true);
+      return;
+    }
+    if (timeFrom.value > timeTo.value) {
+      showStatus('시작 시각이 종료 시각보다 늦을 수 없습니다.', true);
+      return;
+    }
+    saveSettings();
+
+    const inputs = {
+      from_station: fromStation.value.trim() || '용산',
+      to_station: toStation.value.trim() || '광주송정',
+      travel_date: travelDate.value,
+      time_from: timeFrom.value,
+      time_to: timeTo.value,
+      recipient_email: email.value.trim(),
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '요청 중...';
+    try {
+      const resp = await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/check-seats.yml/dispatches`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${t}`,
+          'Accept': 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ref: b, inputs }),
+      });
+
+      if (resp.status === 204) {
+        showStatus(
+          '조회를 시작했습니다. 1시간 동안 5분마다 확인하며, 좌석이 발견되면 이메일로 알려드립니다.',
+          false,
+          `https://github.com/${o}/${r}/actions`
+        );
+      } else {
+        const text = await resp.text();
+        showStatus(`요청 실패 (HTTP ${resp.status}): ${text.slice(0, 300)}`, true);
+      }
+    } catch (err) {
+      showStatus(`요청 중 오류가 발생했습니다: ${err.message}`, true);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '조회 시작 (1시간 / 5분 간격)';
+    }
+  });
+})();
+</script>
+</body>
+</html>
